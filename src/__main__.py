@@ -452,17 +452,27 @@ class Player(PhysicalEntity, GameObjectEntity):
     def handle_shooting(self):
         deadzone = .4
         ax = [0,0]
-        if self.joy.axes[3] < -deadzone:
+        if sys.platform == 'win32':
+            h_ax = 4
+            v_ax = 3
+        else:
+            h_ax = 3       
+            v_ax = 4
+        if self.joy.axes[h_ax] < -deadzone:
             ax[1] = -1
-        if self.joy.axes[3] > deadzone:
+        if self.joy.axes[h_ax] > deadzone:
             ax[1] = 1
-        if self.joy.axes[4] < -deadzone:
+        if self.joy.axes[v_ax] < -deadzone:
             ax[0] = -1
-        if self.joy.axes[4] > deadzone:
+        if self.joy.axes[v_ax] > deadzone:
             ax[0] = 1
         shot_dir = None
         if not (ax[0] == 0 and ax[1] == 0):
-            shot_dir = math.degrees(math.atan2(self.joy.axes[4], self.joy.axes[3]))
+            shot_dir = math.degrees(math.atan2(self.joy.axes[v_ax], self.joy.axes[h_ax]))
+
+        if sys.platform == 'win32':
+            self.handle_shooting_in_windows(shot_dir)
+            return
 
         if not self.shot_cooldown and not self.charged_shot and self.joy.axes[5] > .5 and not shot_dir is None:
             Shot(self.window, self.player_num, shot_dir)
@@ -472,14 +482,29 @@ class Player(PhysicalEntity, GameObjectEntity):
             self.charged_shot = False
         if self.shot_cooldown:
             self.shot_cooldown -= 1
-            
+
+    def handle_shooting_in_windows(self, shot_dir):
+        if not self.shot_cooldown and not shot_dir is None and self.joy.released_buttons[5]:
+            Shot(self.window, self.player_num, shot_dir)
+            self.shot_cooldown = 8
+        if self.shot_cooldown:
+            self.shot_cooldown -= 1
+        
     def handle_claiming(self, tile):
         if tile is None:
+            return
+        if sys.platform == 'win32':
+            self.handle_claiming_in_windows(tile)
             return        
         if self.joy.axes[2] > 0:
             self.charged_claim = True
         if self.charged_claim and self.joy.axes[2] < -.5:
             self.charged_claim = False
+            tile.claim(self.player_num)
+            self.window.tile_claimed()
+
+    def handle_claiming_in_windows(self, tile):
+        if self.joy.released_buttons[4]:
             tile.claim(self.player_num)
             self.window.tile_claimed()
 
