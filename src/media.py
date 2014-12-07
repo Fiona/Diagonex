@@ -34,3 +34,4 @@ class Media(object):
         self.fnt['score_press_start'] = Game.load_font(os.path.join("fnt", "squared.ttf"), size = 40)
         self.fnt['title_name'] = Game.load_font(os.path.join("fnt", "squared.ttf"), size = 110)
         self.fnt['title_press_start'] = Game.load_font(os.path.join("fnt", "squared.ttf"), size = 40)
+        self.fnt['player_select_press_buttons'] = Game.load_font(os.path.join("fnt", "squared.ttf"), size = 40)

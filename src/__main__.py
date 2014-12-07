@@ -25,14 +25,16 @@ class Window(Entity):
 
     particle_emitters = {}
     max_players = 4
-    num_players = 2
+    num_players = 4
     cam_shake = [0, 0]
     all_tiles_claimed = False
     playing = False
     timer = None
     score_board = None
     title = None
-
+    player_select = None
+    selected_players = []
+    
     STATE_TITLE = 1
     STATE_SELECT_PLAYERS = 2
     STATE_PLAYING = 3
@@ -62,7 +64,11 @@ class Window(Entity):
             ## PLAYER SELECT
             ######
             if self.state == Window.STATE_SELECT_PLAYERS:
-                pass
+                if self.player_select is None:
+                    self.player_select = PlayerSelect(self)
+                # Escape to quit
+                if Game.keyboard_key_released(K_ESCAPE):
+                    sys.exit()                
             ######
             ## PLAYING
             ######
@@ -90,7 +96,9 @@ class Window(Entity):
                 if self.score_board is None:
                     self.grid = None
                     self.score_board = ScoreBoard(self)
-
+                # Escape to quit
+                if Game.keyboard_key_released(K_ESCAPE):
+                    sys.exit()                
             # Cam shake
             for i in range(2):
                 self.cam_shake[i] *= .9
@@ -111,12 +119,13 @@ class Window(Entity):
 
     def start_game(self):
         self.title = None
+        self.player_select = None
         self.score_board = None
         self.all_tiles_claimed = False
         self.playing = True
         self.players = {}
-        for player_num in range(self.num_players):
-            self.players[player_num] = Player(self, player_num)
+        for p_id in self.selected_players:
+            self.players[p_id] = Player(self, p_id)
 
     def end_timer(self):
         self.playing = False
@@ -157,7 +166,7 @@ class Window(Entity):
         self.particles = ParticleSystem(self, -10)
         player_colours = [(0.0, .5, 0.0), (.5, 0.0, 0.0), (0.0, 0.0, .5), (.5, .5, 0.0)]
         full_player_colours = [(0.0, 1.0, 0.0), (1.0, 0.0, 0.0), (0.0, 0.0, 1.0), (1.0, 1.0, 0.0)]
-        for p in range(self.num_players):
+        for p in range(self.max_players):
             self.particle_emitters['tile_activate_' + str(p)] = self.particles.add_emitter(
                 10,
                 self.media.gfx['medium_particle'],
@@ -170,7 +179,7 @@ class Window(Entity):
                 size = 1.0,
                 wait_rate = 5
                 )
-        for p in range(self.num_players):
+        for p in range(self.max_players):
             self.particle_emitters['spawn_' + str(p)] = self.particles.add_emitter(
                 30,
                 self.media.gfx['spawn_particle'],
@@ -183,7 +192,7 @@ class Window(Entity):
                 size = 2.0,
                 wait_rate = 5
                 )
-        for p in range(self.num_players):
+        for p in range(self.max_players):
             self.particle_emitters['shot_' + str(p)] = self.particles.add_emitter(
                 30,
                 self.media.gfx['shot_particle'],
@@ -196,7 +205,7 @@ class Window(Entity):
                 size = 1.0,
                 wait_rate = 5
                 )
-        for p in range(self.num_players):
+        for p in range(self.max_players):
             self.particle_emitters['death_' + str(p)] = self.particles.add_emitter(
                 20,
                 self.media.gfx['death_particle'],
@@ -243,6 +252,12 @@ class Window(Entity):
                 if not self.grid.grid[x][y].claimed:
                     return
         self.all_tiles_claimed = True
+
+    def pressed_start(self):
+        for joy in self.input.joys:
+            if joy.released_buttons[7]:
+                return True
+        return False
 
 class GameObjectEntity(Entity):
     def collide_with_player(self, box_size = 40):
@@ -311,7 +326,7 @@ class PhysicalEntity(Entity):
 class Background(Entity):
     def execute(self, window):
         self.window = window
-        for x in range(40):
+        for x in range(50):
             BackgroundBits(self.window)
         while True:
             yield
@@ -328,13 +343,13 @@ class BackgroundBits(GameObjectEntity):
             self.dir = True
         self.alpha = 0.0
         self.rotation = random.choice((0, 90, 180, 270))
-        self.pulse_time = random.randint(300, 700)
+        self.pulse_time = 1
         self.pulse_dir = False
         self.fade_in = False
         while True:
             if not self.fade_in:
                 if self.alpha < .1:
-                    self.alpha += .001
+                    self.alpha += .002
                 else:
                     self.fade_in = True
             else:
@@ -823,17 +838,24 @@ class ScoreBoard(Entity):
             if self.shown_score:
                 if self.press_start_text is None:
                     self.press_start_text = Game.write_text((Game.screen_resolution[0] / 2), Game.screen_resolution[1] - 100, font = self.window.media.fnt['score_press_start'], text = "- press start -", alignment = ALIGN_CENTRE)
-                    self.objs.append(self.press_start_text)
                     for frame, total in Game.timer_ticks(30):
                         self.press_start_text.alpha = Game.slerp(0.0, 1.0, frame / total)
                         yield
                 for joy in self.window.input.joys:
                     if joy.released_buttons[7]:
+                        for frame, total in Game.timer_ticks(20):
+                            self.press_start_text.alpha = Game.slerp(1.0, 0.0, frame / total)
+                            yield
+                        for frame, total in Game.timer_ticks(10):
+                            for x in self.objs:
+                                x.alpha = Game.slerp(x.alpha_to, 0.0, frame / total)
+                            yield
                         self.destroy()
                         self.window.change_state(Window.STATE_TITLE)
             yield
             
     def on_exit(self):
+        self.press_start_text.destroy()
         for x in self.objs:
             x.destroy()
 
@@ -848,13 +870,13 @@ class ScoreBoardPlayer(GameObjectEntity):
         self.y = Game.screen_resolution[1] / 2 + self.start_offsets[self.player_num][1] - 50
         self.anim_time = 0
         self.alpha = 0.0
-        alpha_to = .10
+        self.alpha_to = .10
         self.blend = True
         if self.player_num in self.window.player_scores:
             self.colour = Player.colours[self.player_num]
-            alpha_to = .95
+            self.alpha_to = .95
         for frame, total in Game.timer_ticks(60):
-            self.alpha = Game.slerp(0.0, alpha_to, frame / total)
+            self.alpha = Game.slerp(0.0, self.alpha_to, frame / total)
             self.anim()
             yield
         self.score_text = None
@@ -901,6 +923,7 @@ class ScoreBoardScore(Entity):
             self.text.scale = Game.slerp(1.3, scale_to, frame / total)
             yield
         while True:
+            self.text.alpha = self.player_marker.alpha
             yield
 
     def is_top_score(self):
@@ -933,25 +956,108 @@ class Title(Entity):
             self.text2.alpha = Game.slerp(0.0, 1.0, frame / total)
             yield
         while True:
-            if self.pressed_start():
+            if self.window.pressed_start():
                 break                    
             yield
         for frame, total in Game.timer_ticks(60):
             self.text.alpha = Game.slerp(1.0, 0.0, frame / total)
             self.text2.alpha = Game.slerp(1.0, 0.0, frame / total)
             yield
-        self.window.change_state(Window.STATE_PLAYING)
+        self.window.change_state(Window.STATE_SELECT_PLAYERS)
         self.destroy()
-
-    def pressed_start(self):
-        for joy in self.window.input.joys:
-            if joy.released_buttons[7]:
-                return True
-        return False
     
     def on_exit(self):
         self.text.destroy()
         self.text2.destroy()
+
+class PlayerSelect(Entity):
+    def execute(self, window):
+        self.window = window
+        self.window.selected_players = []
+        self.objs = []
+        for x in range(Window.max_players):
+            if x < len(self.window.input.joys):
+                self.objs.append(PlayerSelectPlayer(self.window, x))
+        self.text = Game.write_text(Game.screen_resolution[0] / 2, (Game.screen_resolution[1] / 2) - 200, text = "press buttons to register", font = self.window.media.fnt['player_select_press_buttons'], alignment = ALIGN_CENTRE)
+        self.text.z = -10
+        self.text.alpha = 0.0
+        for frame, total in Game.timer_ticks(15):
+            self.text.alpha = Game.slerp(0.0, 1.0, frame / total)
+            yield
+        self.text2 = None
+        while True:
+            if len(self.window.selected_players) > 1:
+                if self.text2 is None:
+                    self.text2 = Game.write_text(Game.screen_resolution[0] / 2, (Game.screen_resolution[1] / 2) + 200, text = "press start", font = self.window.media.fnt['player_select_press_buttons'], alignment = ALIGN_CENTRE)
+                    self.text2.z = -10
+                    self.text2.alpha = 0.0
+                    for frame, total in Game.timer_ticks(10):
+                        self.text2.alpha = Game.slerp(0.0, 1.0, frame / total)
+                        yield
+                if self.window.pressed_start():
+                    for x in self.objs:
+                        x.die()
+                    for frame, total in Game.timer_ticks(20):
+                        self.text.alpha = Game.slerp(1.0, 0.0, frame / total)
+                        self.text2.alpha = Game.slerp(1.0, 0.0, frame / total)
+                        yield
+                    self.window.change_state(Window.STATE_PLAYING)
+                    self.destroy()                            
+            yield              
+
+    def on_exit(self):
+        self.text.destroy()
+        self.text2.destroy()
+        for x in self.objs:
+            x.destroy()
+
+class PlayerSelectPlayer(GameObjectEntity):
+    start_offsets = ((-300, 0), (-100, 0), (100, 0), (300, 0))
+    def execute(self, window, player_num):
+        self.window = window
+        self.player_num = player_num
+        self.z = -10
+        self.image = self.window.media.gfx['player']
+        self.x = Game.screen_resolution[0] / 2 + self.start_offsets[self.player_num][0]
+        self.y = Game.screen_resolution[1] / 2 + self.start_offsets[self.player_num][1]
+        self.anim_time = 0
+        self.alpha = 0.0
+        self.colour = Player.colours[self.player_num]
+        self.selected = False
+        self.do_die = False
+        while True:
+            if not self.selected:
+                for k,v in enumerate(self.window.input.joys[self.player_num].released_buttons):
+                    if k == 7:
+                        continue
+                    if v:
+                        for frame, total in Game.timer_ticks(15):
+                            self.alpha = Game.slerp(0.0, 0.95, frame / total)
+                            self.anim()
+                            yield
+                        self.selected = True
+                        self.window.selected_players.append(self.player_num)
+            else:
+                if self.do_die:
+                    for frame, total in Game.timer_ticks(10):
+                        self.alpha = Game.slerp(0.0, 0.95, frame / total)
+                        self.anim()
+                        yield
+                    self.destroy()
+            self.anim()
+            yield
+
+    def die(self):
+        self.do_die = True
+        
+    def anim(self):
+        self.anim_time += 1
+        if self.anim_time > 5:
+            if self.image_seq == 3:
+                self.image_seq = 0
+            else:
+                self.image_seq += 1
+            self.anim_time = 0
 
 Game.screen_resolution = (1366, 768)
 Game.full_screen = False
