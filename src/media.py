@@ -28,7 +28,7 @@ class Media(object):
         self.gfx['spawn_particle'] = Game.load_image(os.path.join("gfx", "spawn_particle.png"))
         self.gfx['shot_particle'] = Game.load_image(os.path.join("gfx", "shot_particle.png"))
         self.gfx['death_particle'] = Game.load_image(os.path.join("gfx", "death_particle.png"))
-        self.fnt['fps'] = Game.load_font(size = 40)
+        self.fnt['fps'] = Game.load_font(os.path.join("fnt", "nulshock.ttf"), size = 40)
         self.fnt['timer'] = Game.load_font(os.path.join("fnt", "nulshock.ttf"), size = 40)
         self.fnt['final_score'] = Game.load_font(os.path.join("fnt", "nulshock.ttf"), size = 60)
         self.fnt['score_press_start'] = Game.load_font(os.path.join("fnt", "squared.ttf"), size = 40)

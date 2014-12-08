@@ -2,6 +2,19 @@
 LD31 o'clock
 Entire Game On One Screen
 """
+# Fix on python 2
+from __future__ import (
+unicode_literals,
+print_function,
+division,
+absolute_import,
+)
+
+from ctypes import util
+try:
+    from OpenGL.platform import win32
+except AttributeError:
+    pass
 
 # System imports
 import sys
@@ -18,6 +31,9 @@ from mrf.mathutil import Vector2d
 from media import Media
 from joy_input import JoyInput
 from particles import ParticleSystem
+
+if sys.platform == 'win32':
+    sys.path += ['.']
 
 class Window(Entity):
     """Primary core Entity"""
