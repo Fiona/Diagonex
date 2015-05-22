@@ -37,7 +37,7 @@ if sys.platform == 'win32':
 
 class Window(Entity):
     """Primary core Entity"""
-    DEBUG = True
+    DEBUG = False
 
     particle_emitters = {}
     max_players = 4
@@ -120,7 +120,7 @@ class Window(Entity):
                 self.cam_shake[i] *= .9
             # FPS text
             if self.DEBUG:
-                self.fps_text.text = str(Game.fps)
+                self.fps_text.text = str(Game.current_fps)
             yield
 
     def change_state(self, state):
@@ -170,6 +170,8 @@ class Window(Entity):
                 self.grid.origin_screen_pos[1] + (y * (GridTile.tile_height)))
 
     def screen_to_grid_pos(self, x, y):
+        if not self.grid:
+            return(0, 0)
         x = x - self.grid.origin_screen_pos[0] - (GridTile.tile_width / 2)
         _x = math.ceil(x / (GridTile.tile_width * .75))
         y = y - self.grid.origin_screen_pos[1] - (GridTile.tile_height / 2)
@@ -184,13 +186,13 @@ class Window(Entity):
         full_player_colours = [(0.0, 1.0, 0.0), (1.0, 0.0, 0.0), (0.0, 0.0, 1.0), (1.0, 1.0, 0.0)]
         for p in range(self.max_players):
             self.particle_emitters['tile_activate_' + str(p)] = self.particles.add_emitter(
-                10,
+                6,
                 self.media.gfx['medium_particle'],
                 shift_pos = 16,
-                speed = 2.0,
-                spin_speed = 10,
+                speed = 3.0,
+                spin_speed = 0,
                 fade_in_speed = 0.05,
-                fade_out_speed = 0.01,
+                fade_out_speed = 0.03,
                 colour = player_colours[p],
                 size = 1.0,
                 wait_rate = 5
@@ -200,10 +202,10 @@ class Window(Entity):
                 30,
                 self.media.gfx['spawn_particle'],
                 shift_pos = 32,
-                speed = 5.0,
-                spin_speed = 4,
-                fade_in_speed = 0.05,
-                fade_out_speed = 0.005,
+                speed = 4.0,
+                spin_speed = 6,
+                fade_in_speed = 0.1,
+                fade_out_speed = 0.01,
                 colour = player_colours[p],
                 size = 2.0,
                 wait_rate = 5
@@ -398,7 +400,7 @@ class Player(PhysicalEntity, GameObjectEntity):
     anim_time = 0
     base_anim_count = 20
     start_offsets = ((-450, 0), (450, 0), (0, -200), (0, 200))
-    colours = ((.5, 1.0, .5), (1.0, .5, .5), (.5, .5, 1.0), (1.0, 1.0, .5))
+    colours = ((.1, 1.0, .1), (1.0, .1, .1), (.1, .1, 1.0), (1.0, 1.0, .1))
     health = 4
     
     def execute(self, window, player_num, respawn = False):
@@ -410,9 +412,11 @@ class Player(PhysicalEntity, GameObjectEntity):
         self.respawning = False
         self.x = Game.screen_resolution[0] / 2 + self.start_offsets[player_num][0]
         self.y = Game.screen_resolution[1] / 2 + self.start_offsets[player_num][1]
+        self.alpha = 0.0        
         if respawn:
             self.respawning = True
-            for i in range(30):
+        else:
+            for i in range(60):
                 yield
         self.image = self.window.media.gfx['player']
         self.colour = self.colours[player_num]
@@ -423,12 +427,11 @@ class Player(PhysicalEntity, GameObjectEntity):
         self.bump_cooldown = 0
         self.shot_cooldown = 0        
         self.z -2
-        spawn_point = self.window.particle_emitters['spawn_' + str(self.player_num)].add_point((self.x, self.y), death_timer = 30)
-        self.alpha = 0.0
         for i in range(30):
             yield
-        while self.alpha < .95:
-            self.alpha += 0.01
+        spawn_point = self.window.particle_emitters['spawn_' + str(self.player_num)].add_point((self.x, self.y), death_timer = 30)
+        for frame, total in Game.timer_ticks(60):
+            self.alpha = Game.slerp(0.0, .95, frame / total)
             yield
         self.health_display = HealthDisplay(self.window)
         self.respawning = False        
@@ -449,7 +452,7 @@ class Player(PhysicalEntity, GameObjectEntity):
             yield
 
     def handle_movement(self):
-        speed = .50
+        speed = .75
         deadzone = .4        
         ax = [0,0]
         if self.joy.axes[0] < -deadzone:
@@ -467,13 +470,25 @@ class Player(PhysicalEntity, GameObjectEntity):
 
     def handle_shooting(self):
         deadzone = .4
-        ax = [0,0]
         if sys.platform == 'win32':
             h_ax = 4
             v_ax = 3
         else:
             h_ax = 3       
             v_ax = 4
+        ax = [self.joy.axes[h_ax], self.joy.axes[v_ax]]
+        shot_dir = math.degrees(math.atan2(ax[1], ax[0]))
+
+        deadzone = .4
+        if (ax[0] < -deadzone or ax[0] > deadzone or \
+            ax[1] < -deadzone or ax[1] > deadzone):
+            if not self.shot_cooldown and not shot_dir is None:
+                Shot(self.window, self.player_num, shot_dir)
+                self.shot_cooldown = 8
+        if self.shot_cooldown:
+            self.shot_cooldown -= 1
+
+        """
         if self.joy.axes[h_ax] < -deadzone:
             ax[1] = -1
         if self.joy.axes[h_ax] > deadzone:
@@ -482,9 +497,6 @@ class Player(PhysicalEntity, GameObjectEntity):
             ax[0] = -1
         if self.joy.axes[v_ax] > deadzone:
             ax[0] = 1
-        shot_dir = None
-        if not (ax[0] == 0 and ax[1] == 0):
-            shot_dir = math.degrees(math.atan2(self.joy.axes[v_ax], self.joy.axes[h_ax]))
 
         if sys.platform == 'win32':
             self.handle_shooting_in_windows(shot_dir)
@@ -498,7 +510,8 @@ class Player(PhysicalEntity, GameObjectEntity):
             self.charged_shot = False
         if self.shot_cooldown:
             self.shot_cooldown -= 1
-
+        """
+        
     def handle_shooting_in_windows(self, shot_dir):
         if not self.shot_cooldown and not shot_dir is None and self.joy.released_buttons[5]:
             Shot(self.window, self.player_num, shot_dir)
@@ -509,6 +522,9 @@ class Player(PhysicalEntity, GameObjectEntity):
     def handle_claiming(self, tile):
         if tile is None:
             return
+        tile.claim(self.player_num)
+        self.window.tile_claimed()
+        """
         if sys.platform == 'win32':
             self.handle_claiming_in_windows(tile)
             return        
@@ -518,6 +534,7 @@ class Player(PhysicalEntity, GameObjectEntity):
             self.charged_claim = False
             tile.claim(self.player_num)
             self.window.tile_claimed()
+        """
 
     def handle_claiming_in_windows(self, tile):
         if self.joy.released_buttons[4]:
@@ -670,7 +687,7 @@ class Shot(GameObjectEntity):
         self.blend = True
         self.image = self.window.media.gfx['shot']
         while True:
-            self.move_forward(10.0)
+            self.move_forward(18.0)
             self.grid_pos = self.window.screen_to_grid_pos(self.x, self.y)
             t = self.window.grid.get_tile(*self.grid_pos)
             if t is None:
@@ -985,9 +1002,9 @@ class Title(Entity):
         self.text = Game.write_text(Game.screen_resolution[0] / 2, Game.screen_resolution[1] / 2, text = "d  i  a  g  o  n  e  x", font = self.window.media.fnt['title_name'], alignment = ALIGN_CENTRE)
         self.text.z = -10
         self.text.alpha = 0.0
-        for frame, total in Game.timer_ticks(60):
+        for frame, total in Game.timer_ticks(30):
             yield
-        for frame, total in Game.timer_ticks(60):
+        for frame, total in Game.timer_ticks(30):
             self.text.alpha = Game.lerp(0.0, 1.0, frame / total)
             yield
         self.text2 = Game.write_text(Game.screen_resolution[0] / 2, (Game.screen_resolution[1] / 2) + 200, text = "press start", font = self.window.media.fnt['title_press_start'], alignment = ALIGN_CENTRE)
@@ -1000,7 +1017,7 @@ class Title(Entity):
             if self.window.pressed_start():
                 break                    
             yield
-        for frame, total in Game.timer_ticks(60):
+        for frame, total in Game.timer_ticks(20):
             self.text.alpha = Game.slerp(1.0, 0.0, frame / total)
             self.text2.alpha = Game.slerp(1.0, 0.0, frame / total)
             yield
@@ -1071,7 +1088,7 @@ class PlayerSelectPlayer(GameObjectEntity):
                 for k,v in enumerate(self.window.input.joys[self.player_num].released_buttons):
                     if k == 7:
                         continue
-                    if v:
+                    if v or (player_num == 2 and Game.keyboard_key_released(K_SPACE)):
                         for frame, total in Game.timer_ticks(15):
                             self.alpha = Game.slerp(0.0, 0.95, frame / total)
                             self.anim()
@@ -1103,6 +1120,6 @@ class PlayerSelectPlayer(GameObjectEntity):
 Game.screen_resolution = (1366, 768)
 Game.full_screen = False
 Game.modules_enabled = ('Entity_Helper',)
-Game.current_fps = 30
+Game.target_fps = 30
 Window()
             
