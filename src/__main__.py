@@ -182,8 +182,8 @@ class Window(Entity):
 
     def setup_particle_system(self):
         self.particles = ParticleSystem(self, -10)
-        player_colours = [(0.0, .5, 0.0), (.5, 0.0, 0.0), (0.0, 0.0, .5), (.5, .5, 0.0)]
-        full_player_colours = [(0.0, 1.0, 0.0), (1.0, 0.0, 0.0), (0.0, 0.0, 1.0), (1.0, 1.0, 0.0)]
+        player_colours = [(0.0, .5, 0.0), (.5, 0.0, 0.0), (0.0, 0.0, .5), (.5, 0.0, .5)]
+        full_player_colours = [(0.0, 1.0, 0.0), (1.0, 0.0, 0.0), (0.0, 0.0, 1.0), (1.0, 0.0, 1.0)]
         for p in range(self.max_players):
             self.particle_emitters['tile_activate_' + str(p)] = self.particles.add_emitter(
                 6,
@@ -191,7 +191,7 @@ class Window(Entity):
                 shift_pos = 16,
                 speed = 3.0,
                 spin_speed = 0,
-                fade_in_speed = 0.05,
+                fade_in_speed = 0.02,
                 fade_out_speed = 0.03,
                 colour = player_colours[p],
                 size = 1.0,
@@ -278,7 +278,7 @@ class Window(Entity):
         return False
 
 class GameObjectEntity(Entity):
-    def collide_with_player(self, box_size = 40):
+    def collide_with_player(self, box_size = 60):
         for p_id in self.window.players:
             if p_id == self.player_num or self.window.players[p_id].health < 0 or self.window.players[p_id].respawning:
                 continue
@@ -399,8 +399,8 @@ class BackgroundBits(GameObjectEntity):
 class Player(PhysicalEntity, GameObjectEntity):
     anim_time = 0
     base_anim_count = 20
-    start_offsets = ((-450, 0), (450, 0), (0, -200), (0, 200))
-    colours = ((.1, 1.0, .1), (1.0, .1, .1), (.1, .1, 1.0), (1.0, 1.0, .1))
+    start_offsets = ((-450, -200), (450, 200), (-450, 200), (450, -200))
+    colours = ((.1, 1.0, .1), (1.0, .1, .1), (.1, .1, 1.0), (1.0, .1, 1.0))
     health = 4
     
     def execute(self, window, player_num, respawn = False):
@@ -412,7 +412,7 @@ class Player(PhysicalEntity, GameObjectEntity):
         self.respawning = False
         self.x = Game.screen_resolution[0] / 2 + self.start_offsets[player_num][0]
         self.y = Game.screen_resolution[1] / 2 + self.start_offsets[player_num][1]
-        self.alpha = 0.0        
+        self.alpha = 0.0   
         if respawn:
             self.respawning = True
         else:
@@ -426,19 +426,23 @@ class Player(PhysicalEntity, GameObjectEntity):
         self.shot_dir = 0
         self.bump_cooldown = 0
         self.shot_cooldown = 0        
-        self.z -2
+        self.z -5
         for i in range(30):
             yield
-        spawn_point = self.window.particle_emitters['spawn_' + str(self.player_num)].add_point((self.x, self.y), death_timer = 30)
-        for frame, total in Game.timer_ticks(60):
-            self.alpha = Game.slerp(0.0, .95, frame / total)
+        spawn_point = self.window.particle_emitters['spawn_' + str(self.player_num)].add_point((self.x, self.y), death_timer = 15)
+        for frame, total in Game.timer_ticks(15):
+            self.alpha = 0.0 if self.alpha else 1.0
             yield
+            yield
+        self.alpha = 1.0
         self.health_display = HealthDisplay(self.window)
         self.respawning = False        
         while True:
             self.handle_movement()
             self.handle_shooting()
             self.grid_pos = self.window.screen_to_grid_pos(self.x, self.y)
+            if self.window.grid is None:
+                return
             t = self.window.grid.get_tile(*self.grid_pos)
             if not t is None:
                 t.activate()
@@ -556,7 +560,8 @@ class Player(PhysicalEntity, GameObjectEntity):
             d = 90
         elif self.grid_pos[1] >= self.window.grid.grid_size[1]:
             d = -90
-        self.bump(Vector2d(dir = math.radians(d), mag = 3.5 * self.current_speed))
+        self.velocity = Vector2d(0.0, 0.0)
+        self.bump(Vector2d(dir = math.radians(d), mag = 35.0))#6.5 * self.current_speed))
         if self.bump_cooldown == 0:
             self.window.do_cam_shake(15)
             self.window.particle_emitters['bump'].add_point((self.x, self.y), death_timer = 5)
@@ -571,7 +576,7 @@ class Player(PhysicalEntity, GameObjectEntity):
             self.bump(Vector2d(dir = math.radians(float(angle_between)), mag = -15.0))
 
     def cap_speed(self):
-        cap = 20.0
+        cap = 60.0
         if self.velocity.i < -cap:
             self.velocity = Vector2d(-cap, self.velocity.j)
         if self.velocity.i > cap:
@@ -776,7 +781,7 @@ class GridTile(GameObjectEntity):
     tile_width = 85
     tile_height = 75
     on = 0
-    claim_colours = ((.6, 1.0, .6), (1.0, .6, .6), (.6, .6, 1.0), (1.0, 1.0, .6))
+    claim_colours = ((.6, 1.0, .6), (1.0, .6, .6), (.6, .6, 1.0), (1.0, .6, 1.0))
     
     def execute(self, window, grid_pos):
         self.window = window
@@ -834,12 +839,15 @@ class GridTile(GameObjectEntity):
         self.claimed = True
 
 class GridTileSeqOverlap(GameObjectEntity):
-    def execute(self, window, tile):
+    def execute(self, window, tile):        
         self.window = window
-        self.tile = tile
-        self.x, self.y, self.z = tile.x, tile.y, tile.z - 1
-        self.image = tile.image
-        self.image_seq = tile.claimed_seq
+        #self.tile = tile
+        #self.x, self.y, self.z = tile.x, tile.y, -3
+        tile.image_seq = tile.claimed_seq
+        tile.alpha = 1.0
+        self.destroy()
+        yield
+        return
         self.colour = tile.claim_colours[tile.claimed_by]
         self.alpha = 0.0
         tile_alpha = .6
