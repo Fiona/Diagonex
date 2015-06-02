@@ -14,6 +14,8 @@ from myrmidon.consts import *
 class Media(object):
     gfx = {}
     fnt = {}
+    sfx = {}
+    mus = {}
     def __init__(self):
         self.gfx['player'] = Game.load_image(os.path.join("gfx", "player.png"), sequence = True, width = 64, height = 64)
         self.gfx['grid'] = Game.load_image(os.path.join("gfx", "grid.png"), sequence = True, width = 128, height = 128)
@@ -35,3 +37,16 @@ class Media(object):
         self.fnt['title_name'] = Game.load_font(os.path.join("fnt", "squared.ttf"), size = 110)
         self.fnt['title_press_start'] = Game.load_font(os.path.join("fnt", "squared.ttf"), size = 40)
         self.fnt['player_select_press_buttons'] = Game.load_font(os.path.join("fnt", "squared.ttf"), size = 40)
+        self.mus['title'] = Game.load_audio(os.path.join("music", "title.ogg"))
+        self.mus['level'] = Game.load_audio(os.path.join("music", "level.ogg"))
+        self.sfx['pressstart'] = Game.load_audio(os.path.join("sfx", "pressstart.wav"))
+        self.sfx['playerregister'] = Game.load_audio(os.path.join("sfx", "playerregister.wav"))
+        self.sfx['respawn'] = Game.load_audio(os.path.join("sfx", "respawn.wav"))
+        self.sfx['bounce'] = Game.load_audio(os.path.join("sfx", "bounce.wav"))
+        self.sfx['shoot'] = Game.load_audio(os.path.join("sfx", "shoot.wav"))
+        self.sfx['death'] = Game.load_audio(os.path.join("sfx", "death.wav"))
+        self.sfx['buildlevel'] = Game.load_audio(os.path.join("sfx", "buildlevel.wav"))
+        self.sfx['timewarning'] = Game.load_audio(os.path.join("sfx", "timewarning.wav"))
+        self.sfx['hurt'] = []
+        for i in range(1,8):
+            self.sfx['hurt'].append(Game.load_audio(os.path.join("sfx", "hurt" + str(i) + ".wav")))

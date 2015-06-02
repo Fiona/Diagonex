@@ -50,13 +50,15 @@ class Window(Entity):
     title = None
     player_select = None
     selected_players = []
-    
+
     STATE_TITLE = 1
     STATE_SELECT_PLAYERS = 2
     STATE_PLAYING = 3
     STATE_SCORES = 4
-    
+
     def execute(self):
+        import pygame.mixer
+        pygame.mixer.set_num_channels(32)
         self.media = Media()
         if self.DEBUG:
             self.fps_text = Game.write_text(0.0, 0.0, font = self.media.fnt['fps'], text = 0)
@@ -75,7 +77,7 @@ class Window(Entity):
                     self.title = Title(self)
                 # Escape to quit
                 if Game.keyboard_key_released(K_ESCAPE):
-                    sys.exit()                
+                    sys.exit()
             ######
             ## PLAYER SELECT
             ######
@@ -84,7 +86,7 @@ class Window(Entity):
                     self.player_select = PlayerSelect(self)
                 # Escape to quit
                 if Game.keyboard_key_released(K_ESCAPE):
-                    sys.exit()                
+                    sys.exit()
             ######
             ## PLAYING
             ######
@@ -94,6 +96,8 @@ class Window(Entity):
                     for x in range(30):
                         yield
                     self.grid.init()
+                    self.media.mus['level'].sound.set_volume(.7)
+                    self.media.mus['level'].sound.play(loops = -1)
                 if self.playing:
                     # Second timer phase
                     if self.timer is None and self.all_tiles_claimed:
@@ -104,7 +108,7 @@ class Window(Entity):
                         self.all_tiles_claimed = True
                     # Leave playing
                     if Game.keyboard_key_released(K_ESCAPE):
-                        self.end_timer()                    
+                        self.end_timer()
             ######
             ## SCORES
             ######
@@ -114,7 +118,7 @@ class Window(Entity):
                     self.score_board = ScoreBoard(self)
                 # Escape to quit
                 if Game.keyboard_key_released(K_ESCAPE):
-                    sys.exit()                
+                    sys.exit()
             # Cam shake
             for i in range(2):
                 self.cam_shake[i] *= .9
@@ -148,9 +152,12 @@ class Window(Entity):
         if not self.timer is None:
             self.timer.time = 0
         self.timer = None
-        self.do_cam_shake(100)        
+        self.do_cam_shake(100)
         for p_id in self.players:
             self.players[p_id].die()
+        self.media.mus['level'].sound.fadeout(2000)
+        self.media.sfx['timewarning'].sound.stop()
+        self.media.sfx['buildlevel'].sound.play()
         self.count_up_scores()
         self.grid.die()
 
@@ -163,7 +170,7 @@ class Window(Entity):
                 self.player_scores[tile.claimed_by] += 1
 
     def respawn_player(self, player_num):
-        self.players[player_num] = Player(self, player_num, respawn = True)        
+        self.players[player_num] = Player(self, player_num, respawn = True)
 
     def grid_pos_to_screen(self, x, y):
         return (self.grid.origin_screen_pos[0] + (x * (GridTile.tile_width * .75)),
@@ -176,7 +183,7 @@ class Window(Entity):
         _x = math.ceil(x / (GridTile.tile_width * .75))
         y = y - self.grid.origin_screen_pos[1] - (GridTile.tile_height / 2)
         if _x % 2:
-            y += GridTile.tile_height / 2        
+            y += GridTile.tile_height / 2
         _y = math.ceil(y / GridTile.tile_height)
         return _x, _y
 
@@ -291,7 +298,7 @@ class GameObjectEntity(Entity):
 
     def get_screen_draw_position(self):
         return self.x - self.window.cam_shake[0] - ((self.image.width / 2) * self.scale), self.y - self.window.cam_shake[1] - ((self.image.height / 2) * self.scale)
-    
+
 class PhysicalEntity(Entity):
     """
     Do self.init() at the start of the entity creation and
@@ -310,13 +317,13 @@ class PhysicalEntity(Entity):
     def set_x(self, val):
         self.pos.i = val
     x = property(get_x, set_x)
-    
+
     def get_y(self):
         return self.pos.j
     def set_y(self, val):
         self.pos.j = val
     y = property(get_y, set_y)
-    
+
     def init(self):
         self.pos = Vector2d(0.0, 0.0)
         self.velocity = Vector2d(0.0, 0.0)
@@ -325,15 +332,15 @@ class PhysicalEntity(Entity):
         self.update_rotation()
         self.update_velocity()
         self.update_position()
- 
+
     def update_velocity(self):
         if math.fabs(self.accel) > 0:
             self.velocity += Vector2d(dir = math.radians(self.rotation), mag = self.accel)
         self.velocity *= self.velocity_friction
- 
+
     def update_position(self):
         self.pos += self.velocity
- 
+
     def update_rotation(self):
         self.rotation_velocity *= self.rotation_friction
         self.rotation += self.rotation_velocity
@@ -395,14 +402,14 @@ class BackgroundBits(GameObjectEntity):
                     self.x = -self.image.width
                     self.y = random.randint(0, Game.screen_resolution[1])
             yield
-            
+
 class Player(PhysicalEntity, GameObjectEntity):
     anim_time = 0
     base_anim_count = 20
     start_offsets = ((-450, -200), (450, 200), (-450, 200), (450, -200))
     colours = ((.1, 1.0, .1), (1.0, .1, .1), (.1, .1, 1.0), (1.0, .1, 1.0))
     health = 4
-    
+
     def execute(self, window, player_num, respawn = False):
         self.init()
         self.window = window
@@ -412,7 +419,7 @@ class Player(PhysicalEntity, GameObjectEntity):
         self.respawning = False
         self.x = Game.screen_resolution[0] / 2 + self.start_offsets[player_num][0]
         self.y = Game.screen_resolution[1] / 2 + self.start_offsets[player_num][1]
-        self.alpha = 0.0   
+        self.alpha = 0.0
         if respawn:
             self.respawning = True
         else:
@@ -425,10 +432,11 @@ class Player(PhysicalEntity, GameObjectEntity):
         self.charged_shot = False
         self.shot_dir = 0
         self.bump_cooldown = 0
-        self.shot_cooldown = 0        
+        self.shot_cooldown = 0
         self.z -5
         for i in range(30):
             yield
+        self.window.media.sfx['respawn'].sound.play()
         spawn_point = self.window.particle_emitters['spawn_' + str(self.player_num)].add_point((self.x, self.y), death_timer = 15)
         for frame, total in Game.timer_ticks(15):
             self.alpha = 0.0 if self.alpha else 1.0
@@ -436,7 +444,7 @@ class Player(PhysicalEntity, GameObjectEntity):
             yield
         self.alpha = 1.0
         self.health_display = HealthDisplay(self.window)
-        self.respawning = False        
+        self.respawning = False
         while True:
             self.handle_movement()
             self.handle_shooting()
@@ -457,7 +465,7 @@ class Player(PhysicalEntity, GameObjectEntity):
 
     def handle_movement(self):
         speed = .75
-        deadzone = .4        
+        deadzone = .4
         ax = [0,0]
         if self.joy.axes[0] < -deadzone:
             ax[1] = -1
@@ -478,7 +486,7 @@ class Player(PhysicalEntity, GameObjectEntity):
             h_ax = 4
             v_ax = 3
         else:
-            h_ax = 3       
+            h_ax = 3
             v_ax = 4
         ax = [self.joy.axes[h_ax], self.joy.axes[v_ax]]
         shot_dir = math.degrees(math.atan2(ax[1], ax[0]))
@@ -487,6 +495,7 @@ class Player(PhysicalEntity, GameObjectEntity):
         if (ax[0] < -deadzone or ax[0] > deadzone or \
             ax[1] < -deadzone or ax[1] > deadzone):
             if not self.shot_cooldown and not shot_dir is None:
+                self.window.media.sfx['shoot'].sound.play()
                 Shot(self.window, self.player_num, shot_dir)
                 self.shot_cooldown = 8
         if self.shot_cooldown:
@@ -515,14 +524,14 @@ class Player(PhysicalEntity, GameObjectEntity):
         if self.shot_cooldown:
             self.shot_cooldown -= 1
         """
-        
+
     def handle_shooting_in_windows(self, shot_dir):
         if not self.shot_cooldown and not shot_dir is None and self.joy.released_buttons[5]:
             Shot(self.window, self.player_num, shot_dir)
             self.shot_cooldown = 8
         if self.shot_cooldown:
             self.shot_cooldown -= 1
-        
+
     def handle_claiming(self, tile):
         if tile is None:
             return
@@ -531,7 +540,7 @@ class Player(PhysicalEntity, GameObjectEntity):
         """
         if sys.platform == 'win32':
             self.handle_claiming_in_windows(tile)
-            return        
+            return
         if self.joy.axes[2] > 0:
             self.charged_claim = True
         if self.charged_claim and self.joy.axes[2] < -.5:
@@ -564,16 +573,20 @@ class Player(PhysicalEntity, GameObjectEntity):
         self.bump(Vector2d(dir = math.radians(d), mag = 35.0))#6.5 * self.current_speed))
         if self.bump_cooldown == 0:
             self.window.do_cam_shake(15)
+            random.choice(self.window.media.sfx['hurt']).sound.play()
+            self.window.media.sfx['bounce'].sound.play()
             self.window.particle_emitters['bump'].add_point((self.x, self.y), death_timer = 5)
             self.bump_cooldown = 5
 
     def handle_player_collision(self):
-        p = self.collide_with_player(box_size = 64)                
+        p = self.collide_with_player(box_size = 64)
         if not p is None:
             angle_between = Game.angle_between_points((self.x, self.y), (p.x, p.y))
             self.window.do_cam_shake(5)
             p.bump(Vector2d(dir = math.radians(float(angle_between)), mag = 15.0))
             self.bump(Vector2d(dir = math.radians(float(angle_between)), mag = -15.0))
+            random.choice(self.window.media.sfx['hurt']).sound.play()
+            self.window.media.sfx['bounce'].sound.play()
 
     def cap_speed(self):
         cap = 60.0
@@ -589,21 +602,23 @@ class Player(PhysicalEntity, GameObjectEntity):
     def hit_by_shot(self):
         self.health -= 1
         self.health_display.show()
+        random.choice(self.window.media.sfx['hurt']).sound.play()
         if self.health < 0:
             self.die()
             self.window.do_cam_shake(100)
             self.window.respawn_player(self.player_num)
 
     def die(self):
+        self.window.media.sfx['death'].sound.play()
         self.window.particle_emitters['death_' + str(self.player_num)].add_point((self.x, self.y), death_timer = 20)
         for x in range(30):
-            PlayerChunk(self.window, self.player_num)                
+            PlayerChunk(self.window, self.player_num)
         self.destroy()
-        
+
     def on_exit(self):
         if not self.health_display is None:
             self.health_display.die()
-        
+
     def anim(self):
         self.anim_time += 1
         if self.anim_time > max(3, self.base_anim_count - (5 * self.current_speed)):
@@ -671,12 +686,12 @@ class HealthDisplay(Entity):
 
     def die(self):
         self.do_die = True
-        
+
     def update(self):
         self.x = self.parent.x + 25
         self.y = self.parent.y - 32
         self.image_seq = max(0, self.parent.health)
-        
+
     def show(self):
         self.do_show = True
         self.show_count = 30
@@ -700,7 +715,7 @@ class Shot(GameObjectEntity):
                 if self.alpha < 0.0:
                     self.destroy()
             else:
-                p = self.collide_with_player()                
+                p = self.collide_with_player()
                 if not p is None:
                     angle_between = Game.angle_between_points((self.x, self.y), (p.x, p.y))
                     p.bump(Vector2d(dir = math.radians(float(angle_between)), mag = 10.0))
@@ -713,19 +728,19 @@ class Shot(GameObjectEntity):
                     self.destroy()
             self.move_forward(10.0)
             yield
-    
+
 class Grid(Entity):
     grid = {}
     origin_screen_pos = (110, 130)
     grid_size = 19, 8
     initialised = False
     done_intro_anim = False
-    
+
     def execute(self, window):
         self.window = window
         self.z = 0
         self.rev_anim = False
-        self.do_die = False        
+        self.do_die = False
         while True:
             if self.initialised and not self.done_intro_anim:
                 for x in self.grid:
@@ -759,9 +774,9 @@ class Grid(Entity):
     def die(self):
         self.do_die = True
         random.shuffle(self.tiles)
-        
+
     def init(self):
-        self.tiles = []        
+        self.tiles = []
         for x in range(self.grid_size[0]):
             self.grid[x] = {}
             for y in range(self.grid_size[1]):
@@ -776,13 +791,13 @@ class Grid(Entity):
         if not y in self.grid[x]:
             return None
         return self.grid[x][y]
-        
+
 class GridTile(GameObjectEntity):
     tile_width = 85
     tile_height = 75
     on = 0
     claim_colours = ((.6, 1.0, .6), (1.0, .6, .6), (.6, .6, 1.0), (1.0, .6, 1.0))
-    
+
     def execute(self, window, grid_pos):
         self.window = window
         self.grid_pos = grid_pos
@@ -797,7 +812,7 @@ class GridTile(GameObjectEntity):
         self.claimed_by = -1
         self.image_seq = 1
         self.image_seq_overlay = None
-        self.do_die = False        
+        self.do_die = False
         while True:
             while not self.on:
                 if self.on == 1:
@@ -820,14 +835,14 @@ class GridTile(GameObjectEntity):
 
     def die(self):
         self.do_die = True
-        
+
     def switch_on(self):
         self.on = 1
 
     def activate(self):
         self.alpha_to = 1.0
         self.alpha = 1.0
-        
+
     def claim(self, player_num):
         if self.claimed and self.claimed_by == player_num:
             return
@@ -839,7 +854,7 @@ class GridTile(GameObjectEntity):
         self.claimed = True
 
 class GridTileSeqOverlap(GameObjectEntity):
-    def execute(self, window, tile):        
+    def execute(self, window, tile):
         self.window = window
         #self.tile = tile
         #self.x, self.y, self.z = tile.x, tile.y, -3
@@ -868,14 +883,15 @@ class Timer(Entity):
         self.text = Game.write_text((Game.screen_resolution[0] / 2), 30, font = self.window.media.fnt['timer'], text = str(self.time), alignment = ALIGN_CENTRE)
         self.text.z = -20
         self.text.alpha = 0.0
-        self.text.scale_point = (self.text.text_image_size[0] / 2, self.text.text_image_size[1] / 2)        
+        self.text.scale_point = (self.text.text_image_size[0] / 2, self.text.text_image_size[1] / 2)
+        self.window.media.sfx['timewarning'].sound.play(loops = -1)
         for frame, total in Game.timer_ticks(30):
             self.text.alpha = Game.lerp(0.0, 1.0, frame / total)
             yield
         while True:
             for frame, total in Game.timer_ticks(30):
                 self.text.scale = Game.lerp(1.2, 1.0, frame / total)
-                yield            
+                yield
             self.time -= 1
             self.text.text = str(self.time)
             self.text.scale_point = (self.text.text_image_size[0] / 2, self.text.text_image_size[1] / 2)
@@ -895,11 +911,11 @@ class ScoreBoard(Entity):
         self.press_start_text = None
         self.objs = []
         for frame, total in Game.timer_ticks(20):
-            yield        
+            yield
         for x in range(Window.max_players):
             self.objs.append(ScoreBoardPlayer(self.window, x))
         for frame, total in Game.timer_ticks(50):
-            yield        
+            yield
         while True:
             if self.shown_score:
                 if self.press_start_text is None:
@@ -909,6 +925,7 @@ class ScoreBoard(Entity):
                         yield
                 for joy in self.window.input.joys:
                     if joy.released_buttons[7]:
+                        self.window.media.sfx['pressstart'].sound.play()
                         for frame, total in Game.timer_ticks(20):
                             self.press_start_text.alpha = Game.slerp(1.0, 0.0, frame / total)
                             yield
@@ -919,7 +936,7 @@ class ScoreBoard(Entity):
                         self.destroy()
                         self.window.change_state(Window.STATE_TITLE)
             yield
-            
+
     def on_exit(self):
         self.press_start_text.destroy()
         for x in self.objs:
@@ -1000,7 +1017,7 @@ class ScoreBoardScore(Entity):
         if s[-1] == self.score:
             return True
         return False
-    
+
     def on_exit(self):
         self.text.destroy()
 
@@ -1010,6 +1027,7 @@ class Title(Entity):
         self.text = Game.write_text(Game.screen_resolution[0] / 2, Game.screen_resolution[1] / 2, text = "d  i  a  g  o  n  e  x", font = self.window.media.fnt['title_name'], alignment = ALIGN_CENTRE)
         self.text.z = -10
         self.text.alpha = 0.0
+        self.window.media.mus['title'].sound.play(loops = -1)
         for frame, total in Game.timer_ticks(30):
             yield
         for frame, total in Game.timer_ticks(30):
@@ -1023,7 +1041,8 @@ class Title(Entity):
             yield
         while True:
             if self.window.pressed_start():
-                break                    
+                self.window.media.sfx['pressstart'].sound.play()
+                break
             yield
         for frame, total in Game.timer_ticks(20):
             self.text.alpha = Game.slerp(1.0, 0.0, frame / total)
@@ -1031,7 +1050,7 @@ class Title(Entity):
             yield
         self.window.change_state(Window.STATE_SELECT_PLAYERS)
         self.destroy()
-    
+
     def on_exit(self):
         self.text.destroy()
         self.text2.destroy()
@@ -1061,6 +1080,8 @@ class PlayerSelect(Entity):
                         self.text2.alpha = Game.slerp(0.0, 1.0, frame / total)
                         yield
                 if self.window.pressed_start():
+                    self.window.media.sfx['pressstart'].sound.play()
+                    self.window.media.mus['title'].sound.fadeout(2000)
                     for x in self.objs:
                         x.die()
                     for frame, total in Game.timer_ticks(20):
@@ -1068,8 +1089,8 @@ class PlayerSelect(Entity):
                         self.text2.alpha = Game.slerp(1.0, 0.0, frame / total)
                         yield
                     self.window.change_state(Window.STATE_PLAYING)
-                    self.destroy()                            
-            yield              
+                    self.destroy()
+            yield
 
     def on_exit(self):
         self.text.destroy()
@@ -1097,6 +1118,7 @@ class PlayerSelectPlayer(GameObjectEntity):
                     if k == 7:
                         continue
                     if v or (player_num == 2 and Game.keyboard_key_released(K_SPACE)):
+                        self.window.media.sfx['playerregister'].sound.play()
                         for frame, total in Game.timer_ticks(15):
                             self.alpha = Game.slerp(0.0, 0.95, frame / total)
                             self.anim()
@@ -1115,7 +1137,7 @@ class PlayerSelectPlayer(GameObjectEntity):
 
     def die(self):
         self.do_die = True
-        
+
     def anim(self):
         self.anim_time += 1
         if self.anim_time > 5:
@@ -1130,4 +1152,3 @@ Game.full_screen = False
 Game.modules_enabled = ('Entity_Helper',)
 Game.target_fps = 30
 Window()
-            
