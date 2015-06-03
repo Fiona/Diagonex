@@ -18,7 +18,7 @@ class Media(object):
     mus = {}
     def __init__(self):
         self.gfx['player'] = Game.load_image(os.path.join("gfx", "player.png"), sequence = True, width = 64, height = 64)
-        self.gfx['grid'] = Game.load_image(os.path.join("gfx", "grid.png"), sequence = True, width = 128, height = 128)
+        self.gfx['grid'] = Game.load_image(os.path.join("gfx", "grid.png"), sequence = True, width = 96, height = 96)
         self.gfx['health'] = Game.load_image(os.path.join("gfx", "health.png"), sequence = True, width = 19, height = 18)
         self.gfx['medium_particle'] = Game.load_image(os.path.join("gfx", "medium_particle.png"))
         self.gfx['footstep1'] = Game.load_image(os.path.join("gfx", "footstep1.png"))

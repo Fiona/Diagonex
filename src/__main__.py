@@ -42,6 +42,8 @@ class Window(Entity):
     particle_emitters = {}
     max_players = 4
     num_players = 4
+    timer_length = 90
+    timer_last_section = 30
     cam_shake = [0, 0]
     all_tiles_claimed = False
     playing = False
@@ -100,7 +102,7 @@ class Window(Entity):
                     self.media.mus['level'].sound.play(loops = -1)
                 if self.playing:
                     # Second timer phase
-                    if self.timer is None and self.all_tiles_claimed:
+                    if self.timer is None:
                         self.timer = Timer(self)
                     if Game.keyboard_key_released(K_F11) and self.DEBUG:
                         if not self.timer is None:
@@ -193,13 +195,13 @@ class Window(Entity):
         full_player_colours = [(0.0, 1.0, 0.0), (1.0, 0.0, 0.0), (0.0, 0.0, 1.0), (1.0, 0.0, 1.0)]
         for p in range(self.max_players):
             self.particle_emitters['tile_activate_' + str(p)] = self.particles.add_emitter(
-                6,
+                3,
                 self.media.gfx['medium_particle'],
-                shift_pos = 16,
+                shift_pos = 8,
                 speed = 3.0,
                 spin_speed = 0,
-                fade_in_speed = 0.02,
-                fade_out_speed = 0.03,
+                fade_in_speed = 0.2,
+                fade_out_speed = 0.1,
                 colour = player_colours[p],
                 size = 1.0,
                 wait_rate = 5
@@ -406,7 +408,7 @@ class BackgroundBits(GameObjectEntity):
 class Player(PhysicalEntity, GameObjectEntity):
     anim_time = 0
     base_anim_count = 20
-    start_offsets = ((-450, -200), (450, 200), (-450, 200), (450, -200))
+    start_offsets = ((-475, -200), (470, 200), (-475, 200), (470, -200))
     colours = ((.1, 1.0, .1), (1.0, .1, .1), (.1, .1, 1.0), (1.0, .1, 1.0))
     health = 4
 
@@ -464,7 +466,7 @@ class Player(PhysicalEntity, GameObjectEntity):
             yield
 
     def handle_movement(self):
-        speed = .75
+        speed = 1.5 #.75
         deadzone = .4
         ax = [0,0]
         if self.joy.axes[0] < -deadzone:
@@ -732,7 +734,7 @@ class Shot(GameObjectEntity):
 class Grid(Entity):
     grid = {}
     origin_screen_pos = (110, 130)
-    grid_size = 19, 8
+    grid_size = 25, 11
     initialised = False
     done_intro_anim = False
 
@@ -762,7 +764,9 @@ class Grid(Entity):
                         self.grid[x][y].activate()
                     yield
             while self.do_die:
-                for x in range(2):
+                for x in range(3):
+                    if not len(self.tiles):
+                        continue
                     tile = self.tiles.pop()
                     tile.die()
                 if not len(self.tiles):
@@ -793,8 +797,8 @@ class Grid(Entity):
         return self.grid[x][y]
 
 class GridTile(GameObjectEntity):
-    tile_width = 85
-    tile_height = 75
+    tile_width = 63
+    tile_height = 56
     on = 0
     claim_colours = ((.6, 1.0, .6), (1.0, .6, .6), (.6, .6, 1.0), (1.0, .6, 1.0))
 
@@ -850,7 +854,7 @@ class GridTile(GameObjectEntity):
         if self.image_seq == 1 and self.image_seq_overlay is None:
             self.image_seq_overlay = GridTileSeqOverlap(self.window, self)
         self.colour = self.claim_colours[player_num]
-        self.window.particle_emitters['tile_activate_' + str(player_num)].add_point((self.x, self.y), death_timer = 30)
+        self.window.particle_emitters['tile_activate_' + str(player_num)].add_point((self.x, self.y), death_timer = 15)
         self.claimed = True
 
 class GridTileSeqOverlap(GameObjectEntity):
@@ -879,30 +883,60 @@ class GridTileSeqOverlap(GameObjectEntity):
 class Timer(Entity):
     def execute(self, window):
         self.window = window
-        self.time = 30
+        self.time = self.window.timer_length
+        self.timer_display = None
+        for frame, total in Game.timer_ticks(60):
+            yield        
+        while True:
+            for frame, total in Game.timer_ticks(30):
+                yield
+            self.time -= 1
+            if self.timer_display:
+                self.timer_display.switch_state("state_pulse", self.time)
+            else:
+                if self.time <= self.window.timer_last_section:
+                    self.timer_display = TimerDisplay(self.window)
+                    self.window.media.sfx['timewarning'].sound.play(loops = -1)
+            if not self.time:
+                break
+        self.window.end_timer()
+        self.timer_display.switch_state("state_die")
+        while self.timer_display.is_alive():
+            yield
+                
+    def on_exit(self):
+        self.timer_display.destroy()
+                    
+class TimerDisplay(Entity):
+    def execute(self, window):
+        self.window = window
+        self.time = self.parent.time
         self.text = Game.write_text((Game.screen_resolution[0] / 2), 30, font = self.window.media.fnt['timer'], text = str(self.time), alignment = ALIGN_CENTRE)
         self.text.z = -20
         self.text.alpha = 0.0
         self.text.scale_point = (self.text.text_image_size[0] / 2, self.text.text_image_size[1] / 2)
-        self.window.media.sfx['timewarning'].sound.play(loops = -1)
         for frame, total in Game.timer_ticks(30):
             self.text.alpha = Game.lerp(0.0, 1.0, frame / total)
             yield
+        yield self.switch_state("state_normal")
+
+    def state_normal(self):
         while True:
-            for frame, total in Game.timer_ticks(30):
-                self.text.scale = Game.lerp(1.2, 1.0, frame / total)
-                yield
-            self.time -= 1
-            self.text.text = str(self.time)
-            self.text.scale_point = (self.text.text_image_size[0] / 2, self.text.text_image_size[1] / 2)
-            if self.time == 0:
-                break
-        self.window.end_timer()
-        while self.text.alpha > 0:
-            self.text.alpha -= .05
+            yield
+
+    def state_pulse(self, time):
+        self.time = time
+        self.text.text = str(time)
+        for frame, total in Game.timer_ticks(30):
+            self.text.scale = Game.lerp(1.2, 1.0, frame / total)
+            yield
+        yield self.switch_state("state_normal")
+
+    def state_die(self):
+        for frame, total in Game.timer_ticks(30):
+            self.text.alpha = Game.lerp(1.0, 0.0, frame / total)
             yield
         self.text.destroy()
-        self.destroy()
 
 class ScoreBoard(Entity):
     def execute(self, window):
